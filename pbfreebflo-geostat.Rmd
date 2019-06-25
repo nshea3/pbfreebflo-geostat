@@ -15,7 +15,7 @@ library(leaflet)
 leadbflo_data = read.csv("data/buffalo_lead.csv", header=TRUE)
 
 
-leaflet(leadbflo_data) %>% addTiles() %>% addCircles(size = 1, color = ~lead_ppb, lng = ~longitude, lat = ~latitude)
+leaflet(leadbflo_data) %>% addTiles() %>% addCircles(color = ~lead_ppb, lng = ~longitude, lat = ~latitude)
 
 ```
 
