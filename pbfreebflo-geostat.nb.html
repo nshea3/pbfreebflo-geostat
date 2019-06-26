@@ -5419,6 +5419,758 @@ function asArray(value) {
 
 },{}]},{},[13]);
 </script>
+<script>(function (root, factory) {
+	if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['leaflet'], factory);
+	} else if (typeof modules === 'object' && module.exports) {
+		// define a Common JS module that relies on 'leaflet'
+		module.exports = factory(require('leaflet'));
+	} else {
+		// Assume Leaflet is loaded into global object L already
+		factory(L);
+	}
+}(this, function (L) {
+	'use strict';
+
+	L.TileLayer.Provider = L.TileLayer.extend({
+		initialize: function (arg, options) {
+			var providers = L.TileLayer.Provider.providers;
+
+			var parts = arg.split('.');
+
+			var providerName = parts[0];
+			var variantName = parts[1];
+
+			if (!providers[providerName]) {
+				throw 'No such provider (' + providerName + ')';
+			}
+
+			var provider = {
+				url: providers[providerName].url,
+				options: providers[providerName].options
+			};
+
+			// overwrite values in provider from variant.
+			if (variantName && 'variants' in providers[providerName]) {
+				if (!(variantName in providers[providerName].variants)) {
+					throw 'No such variant of ' + providerName + ' (' + variantName + ')';
+				}
+				var variant = providers[providerName].variants[variantName];
+				var variantOptions;
+				if (typeof variant === 'string') {
+					variantOptions = {
+						variant: variant
+					};
+				} else {
+					variantOptions = variant.options;
+				}
+				provider = {
+					url: variant.url || provider.url,
+					options: L.Util.extend({}, provider.options, variantOptions)
+				};
+			}
+
+			// If retina option is set
+			if (provider.options.retina) {
+				// Check retina screen
+				if (options.detectRetina && L.Browser.retina) {
+					// The retina option will be active now
+					// But we need to prevent Leaflet retina mode
+					options.detectRetina = false;
+				} else {
+					// No retina, remove option
+					provider.options.retina = '';
+				}
+			}
+
+			// replace attribution placeholders with their values from toplevel provider attribution,
+			// recursively
+			var attributionReplacer = function (attr) {
+				if (attr.indexOf('{attribution.') === -1) {
+					return attr;
+				}
+				return attr.replace(/\{attribution.(\w*)\}/,
+					function (match, attributionName) {
+						return attributionReplacer(providers[attributionName].options.attribution);
+					}
+				);
+			};
+			provider.options.attribution = attributionReplacer(provider.options.attribution);
+
+			// Compute final options combining provider options with any user overrides
+			var layerOpts = L.Util.extend({}, provider.options, options);
+			L.TileLayer.prototype.initialize.call(this, provider.url, layerOpts);
+		}
+	});
+
+	/**
+	 * Definition of providers.
+	 * see http://leafletjs.com/reference.html#tilelayer for options in the options map.
+	 */
+
+	L.TileLayer.Provider.providers = {
+		OpenStreetMap: {
+			url: '//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+			options: {
+				maxZoom: 19,
+				attribution:
+					'&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+			},
+			variants: {
+				Mapnik: {},
+				BlackAndWhite: {
+					url: 'http://{s}.tiles.wmflabs.org/bw-mapnik/{z}/{x}/{y}.png',
+					options: {
+						maxZoom: 18
+					}
+				},
+				DE: {
+					url: '//{s}.tile.openstreetmap.de/tiles/osmde/{z}/{x}/{y}.png',
+					options: {
+						maxZoom: 18
+					}
+				},
+				CH: {
+					url: '//tile.osm.ch/switzerland/{z}/{x}/{y}.png',
+					options: {
+						maxZoom: 18
+					}
+				},
+				France: {
+					url: '//{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png',
+					options: {
+						maxZoom: 20,
+						attribution: '&copy; Openstreetmap France | {attribution.OpenStreetMap}'
+					}
+				},
+				HOT: {
+					url: '//{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+					options: {
+						attribution: '{attribution.OpenStreetMap}, Tiles courtesy of <a href="http://hot.openstreetmap.org/" target="_blank">Humanitarian OpenStreetMap Team</a>'
+					}
+				},
+				BZH: {
+					url: 'https://tile.openstreetmap.bzh/br/{z}/{x}/{y}.png',
+					options: {
+						attribution: '{attribution.OpenStreetMap}, Tiles courtesy of <a href="http://www.openstreetmap.bzh/" target="_blank">Breton OpenStreetMap Team</a>',
+						bounds: [[46.2, -5.5], [50, 0.7]]
+					}
+				}
+			}
+		},
+		OpenInfraMap: {
+			url: 'https://tiles-{s}.openinframap.org/{variant}/{z}/{x}/{y}.png',
+			options: {
+				maxZoom: 18,
+				attribution:
+					'{attribution.OpenStreetMap}, <a href="http://www.openinframap.org/about.html">About OpenInfraMap</a>'
+			},
+			variants: {
+				  Power:       'power' ,
+				  Telecom:     'telecoms' ,
+				  Petroleum:   'petroleum' ,
+				  Water:       'water'
+			}
+		},
+		OpenSeaMap: {
+			url: '//tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
+			options: {
+				attribution: 'Map data: &copy; <a href="http://www.openseamap.org">OpenSeaMap</a> contributors'
+			}
+		},
+		OpenPtMap: {
+			url: 'http://openptmap.org/tiles/{z}/{x}/{y}.png',
+			options: {
+				maxZoom: 17,
+				attribution: 'Map data: &copy; <a href="http://www.openptmap.org">OpenPtMap</a> contributors'
+			}
+		},
+		OpenTopoMap: {
+			url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+			options: {
+				maxZoom: 17,
+				attribution: 'Map data: {attribution.OpenStreetMap}, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+			}
+		},
+		OpenRailwayMap: {
+			url: 'https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png',
+			options: {
+				maxZoom: 19,
+				attribution: 'Map data: {attribution.OpenStreetMap} | Map style: &copy; <a href="https://www.OpenRailwayMap.org">OpenRailwayMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+			}
+		},
+		OpenFireMap: {
+			url: 'http://openfiremap.org/hytiles/{z}/{x}/{y}.png',
+			options: {
+				maxZoom: 19,
+				attribution: 'Map data: {attribution.OpenStreetMap} | Map style: &copy; <a href="http://www.openfiremap.org">OpenFireMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+			}
+		},
+		SafeCast: {
+			url: '//s3.amazonaws.com/te512.safecast.org/{z}/{x}/{y}.png',
+			options: {
+				maxZoom: 16,
+				attribution: 'Map data: {attribution.OpenStreetMap} | Map style: &copy; <a href="https://blog.safecast.org/about/">SafeCast</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+			}
+		},
+		Thunderforest: {
+			url: 'https://{s}.tile.thunderforest.com/{variant}/{z}/{x}/{y}.png?apikey={apikey}',
+			options: {
+				attribution:
+					'&copy; <a href="http://www.thunderforest.com/">Thunderforest</a>, {attribution.OpenStreetMap}',
+				variant: 'cycle',
+				apikey: '<insert your api key here>',
+				maxZoom: 22
+			},
+			variants: {
+				OpenCycleMap: 'cycle',
+				Transport: {
+					options: {
+						variant: 'transport'
+					}
+				},
+				TransportDark: {
+					options: {
+						variant: 'transport-dark'
+					}
+				},
+				SpinalMap: {
+					options: {
+						variant: 'spinal-map'
+					}
+				},
+				Landscape: 'landscape',
+				Outdoors: 'outdoors',
+				Pioneer: 'pioneer'
+			}
+		},
+		OpenMapSurfer: {
+			url: 'https://korona.geog.uni-heidelberg.de/tiles/{variant}/x={x}&y={y}&z={z}',
+			options: {
+				maxZoom: 20,
+				variant: 'roads',
+				attribution: 'Imagery from <a href="http://giscience.uni-hd.de/">GIScience Research Group @ University of Heidelberg</a> &mdash; Map data {attribution.OpenStreetMap}'
+			},
+			variants: {
+				Roads: 'roads',
+				AdminBounds: {
+					options: {
+						variant: 'adminb',
+						maxZoom: 19
+					}
+				},
+				Grayscale: {
+					options: {
+						variant: 'roadsg',
+						maxZoom: 19
+					}
+				}
+			}
+		},
+		Hydda: {
+			url: '//{s}.tile.openstreetmap.se/hydda/{variant}/{z}/{x}/{y}.png',
+			options: {
+				maxZoom: 18,
+				variant: 'full',
+				attribution: 'Tiles courtesy of <a href="http://openstreetmap.se/" target="_blank">OpenStreetMap Sweden</a> &mdash; Map data {attribution.OpenStreetMap}'
+			},
+			variants: {
+				Full: 'full',
+				Base: 'base',
+				RoadsAndLabels: 'roads_and_labels'
+			}
+		},
+		MapBox: {
+			url: 'https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}',
+			options: {
+				attribution:
+					'Imagery from <a href="http://mapbox.com/about/maps/">MapBox</a> &mdash; ' +
+					'Map data {attribution.OpenStreetMap}',
+				subdomains: 'abcd',
+				id: 'streets',
+				accessToken: '<insert your access token here>',
+			}
+		},
+		Stamen: {
+			url: '//stamen-tiles-{s}.a.ssl.fastly.net/{variant}/{z}/{x}/{y}.{ext}',
+			options: {
+				attribution:
+					'Map tiles by <a href="http://stamen.com">Stamen Design</a>, ' +
+					'<a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; ' +
+					'Map data {attribution.OpenStreetMap}',
+				subdomains: 'abcd',
+				minZoom: 0,
+				maxZoom: 20,
+				variant: 'toner',
+				ext: 'png'
+			},
+			variants: {
+				Toner: 'toner',
+				TonerBackground: 'toner-background',
+				TonerHybrid: 'toner-hybrid',
+				TonerLines: 'toner-lines',
+				TonerLabels: 'toner-labels',
+				TonerLite: 'toner-lite',
+				Watercolor: {
+					options: {
+						variant: 'watercolor',
+						minZoom: 1,
+						maxZoom: 16
+					}
+				},
+				Terrain: {
+					options: {
+						variant: 'terrain',
+						minZoom: 0,
+						maxZoom: 18
+					}
+				},
+				TerrainBackground: {
+					options: {
+						variant: 'terrain-background',
+						minZoom: 0,
+						maxZoom: 18
+					}
+				},
+				TopOSMRelief: {
+					options: {
+						variant: 'toposm-color-relief',
+						ext: 'jpg',
+						bounds: [[22, -132], [51, -56]]
+					}
+				},
+				TopOSMFeatures: {
+					options: {
+						variant: 'toposm-features',
+						bounds: [[22, -132], [51, -56]],
+						opacity: 0.9
+					}
+				}
+			}
+		},
+		Esri: {
+			url: '//server.arcgisonline.com/ArcGIS/rest/services/{variant}/MapServer/tile/{z}/{y}/{x}',
+			options: {
+				variant: 'World_Street_Map',
+				attribution: 'Tiles &copy; Esri'
+			},
+			variants: {
+				WorldStreetMap: {
+					options: {
+						attribution:
+							'{attribution.Esri} &mdash; ' +
+							'Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012'
+					}
+				},
+				DeLorme: {
+					options: {
+						variant: 'Specialty/DeLorme_World_Base_Map',
+						minZoom: 1,
+						maxZoom: 11,
+						attribution: '{attribution.Esri} &mdash; Copyright: &copy;2012 DeLorme'
+					}
+				},
+				WorldTopoMap: {
+					options: {
+						variant: 'World_Topo_Map',
+						attribution:
+							'{attribution.Esri} &mdash; ' +
+							'Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community'
+					}
+				},
+				WorldImagery: {
+					options: {
+						variant: 'World_Imagery',
+						attribution:
+							'{attribution.Esri} &mdash; ' +
+							'Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+					}
+				},
+				WorldTerrain: {
+					options: {
+						variant: 'World_Terrain_Base',
+						maxZoom: 13,
+						attribution:
+							'{attribution.Esri} &mdash; ' +
+							'Source: USGS, Esri, TANA, DeLorme, and NPS'
+					}
+				},
+				WorldShadedRelief: {
+					options: {
+						variant: 'World_Shaded_Relief',
+						maxZoom: 13,
+						attribution: '{attribution.Esri} &mdash; Source: Esri'
+					}
+				},
+				WorldPhysical: {
+					options: {
+						variant: 'World_Physical_Map',
+						maxZoom: 8,
+						attribution: '{attribution.Esri} &mdash; Source: US National Park Service'
+					}
+				},
+				OceanBasemap: {
+					options: {
+						variant: 'Ocean_Basemap',
+						maxZoom: 13,
+						attribution: '{attribution.Esri} &mdash; Sources: GEBCO, NOAA, CHS, OSU, UNH, CSUMB, National Geographic, DeLorme, NAVTEQ, and Esri'
+					}
+				},
+				NatGeoWorldMap: {
+					options: {
+						variant: 'NatGeo_World_Map',
+						maxZoom: 16,
+						attribution: '{attribution.Esri} &mdash; National Geographic, Esri, DeLorme, NAVTEQ, UNEP-WCMC, USGS, NASA, ESA, METI, NRCAN, GEBCO, NOAA, iPC'
+					}
+				},
+				WorldGrayCanvas: {
+					options: {
+						variant: 'Canvas/World_Light_Gray_Base',
+						maxZoom: 16,
+						attribution: '{attribution.Esri} &mdash; Esri, DeLorme, NAVTEQ'
+					}
+				}
+			}
+		},
+		OpenWeatherMap: {
+			url: 'http://{s}.tile.openweathermap.org/map/{variant}/{z}/{x}/{y}.png?appid={apiKey}',
+			options: {
+				maxZoom: 19,
+				attribution: 'Map data &copy; <a href="http://openweathermap.org">OpenWeatherMap</a>',
+				apiKey:'<insert your api key here>',
+				opacity: 0.5
+			},
+			variants: {
+				Clouds: 'clouds',
+				CloudsClassic: 'clouds_cls',
+				Precipitation: 'precipitation',
+				PrecipitationClassic: 'precipitation_cls',
+				Rain: 'rain',
+				RainClassic: 'rain_cls',
+				Pressure: 'pressure',
+				PressureContour: 'pressure_cntr',
+				Wind: 'wind',
+				Temperature: 'temp',
+				Snow: 'snow'
+			}
+		},
+		HERE: {
+			/*
+			 * HERE maps, formerly Nokia maps.
+			 * These basemaps are free, but you need an API key. Please sign up at
+			 * http://developer.here.com/getting-started
+			 *
+			 * Note that the base urls contain '.cit' whichs is HERE's
+			 * 'Customer Integration Testing' environment. Please remove for production
+			 * envirionments.
+			 */
+			url:
+				'//{s}.{base}.maps.cit.api.here.com/maptile/2.1/' +
+				'{type}/{mapID}/{variant}/{z}/{x}/{y}/{size}/{format}?' +
+				'app_id={app_id}&app_code={app_code}&lg={language}',
+			options: {
+				attribution:
+					'Map &copy; 1987-2014 <a href="http://developer.here.com">HERE</a>',
+				subdomains: '1234',
+				mapID: 'newest',
+				'app_id': '<insert your app_id here>',
+				'app_code': '<insert your app_code here>',
+				base: 'base',
+				variant: 'normal.day',
+				maxZoom: 20,
+				type: 'maptile',
+				language: 'eng',
+				format: 'png8',
+				size: '256'
+			},
+			variants: {
+				normalDay: 'normal.day',
+				normalDayCustom: 'normal.day.custom',
+				normalDayGrey: 'normal.day.grey',
+				normalDayMobile: 'normal.day.mobile',
+				normalDayGreyMobile: 'normal.day.grey.mobile',
+				normalDayTransit: 'normal.day.transit',
+				normalDayTransitMobile: 'normal.day.transit.mobile',
+				normalNight: 'normal.night',
+				normalNightMobile: 'normal.night.mobile',
+				normalNightGrey: 'normal.night.grey',
+				normalNightGreyMobile: 'normal.night.grey.mobile',
+
+				basicMap: {
+					options: {
+						type: 'basetile'
+					}
+				},
+				mapLabels: {
+					options: {
+						type: 'labeltile',
+						format: 'png'
+					}
+				},
+				trafficFlow: {
+					options: {
+						base: 'traffic',
+						type: 'flowtile'
+					}
+				},
+				carnavDayGrey: 'carnav.day.grey',
+				hybridDay: {
+					options: {
+						base: 'aerial',
+						variant: 'hybrid.day'
+					}
+				},
+				hybridDayMobile: {
+					options: {
+						base: 'aerial',
+						variant: 'hybrid.day.mobile'
+					}
+				},
+				pedestrianDay: 'pedestrian.day',
+				pedestrianNight: 'pedestrian.night',
+				satelliteDay: {
+					options: {
+						base: 'aerial',
+						variant: 'satellite.day'
+					}
+				},
+				terrainDay: {
+					options: {
+						base: 'aerial',
+						variant: 'terrain.day'
+					}
+				},
+				terrainDayMobile: {
+					options: {
+						base: 'aerial',
+						variant: 'terrain.day.mobile'
+					}
+				}
+			}
+		},
+		FreeMapSK: {
+			url: 'http://t{s}.freemap.sk/T/{z}/{x}/{y}.jpeg',
+			options: {
+				minZoom: 8,
+				maxZoom: 16,
+				subdomains: '1234',
+				bounds: [[47.204642, 15.996093], [49.830896, 22.576904]],
+				attribution:
+					'{attribution.OpenStreetMap}, vizualization CC-By-SA 2.0 <a href="http://freemap.sk">Freemap.sk</a>'
+			}
+		},
+		MtbMap: {
+			url: 'http://tile.mtbmap.cz/mtbmap_tiles/{z}/{x}/{y}.png',
+			options: {
+				attribution:
+					'{attribution.OpenStreetMap} &amp; USGS'
+			}
+		},
+		CartoDB: {
+			url: 'https://cartodb-basemaps-{s}.global.ssl.fastly.net/{variant}/{z}/{x}/{y}.png',
+			options: {
+				attribution: '{attribution.OpenStreetMap} &copy; <a href="http://cartodb.com/attributions">CartoDB</a>',
+				subdomains: 'abcd',
+				maxZoom: 19,
+				variant: 'light_all'
+			},
+			variants: {
+				Positron: 'light_all',
+				PositronNoLabels: 'light_nolabels',
+				PositronOnlyLabels: 'light_only_labels',
+				DarkMatter: 'dark_all',
+				DarkMatterNoLabels: 'dark_nolabels',
+				DarkMatterOnlyLabels: 'dark_only_labels'
+			}
+		},
+		HikeBike: {
+			url: 'http://{s}.tiles.wmflabs.org/{variant}/{z}/{x}/{y}.png',
+			options: {
+				maxZoom: 19,
+				attribution: '{attribution.OpenStreetMap}',
+				variant: 'hikebike'
+			},
+			variants: {
+				HikeBike: {},
+				HillShading: {
+					options: {
+						maxZoom: 15,
+						variant: 'hillshading'
+					}
+				}
+			}
+		},
+		BasemapAT: {
+			url: '//maps{s}.wien.gv.at/basemap/{variant}/normal/google3857/{z}/{y}/{x}.{format}',
+			options: {
+				maxZoom: 19,
+				attribution: 'Datenquelle: <a href="https://www.basemap.at">basemap.at</a>',
+				subdomains: ['', '1', '2', '3', '4'],
+				format: 'png',
+				bounds: [[46.358770, 8.782379], [49.037872, 17.189532]],
+				variant: 'geolandbasemap'
+			},
+			variants: {
+				basemap: {
+					options: {
+						maxZoom: 20, // currently only in Vienna
+						variant: 'geolandbasemap'
+					}
+				},
+				grau: 'bmapgrau',
+				overlay: 'bmapoverlay',
+				highdpi: {
+					options: {
+						variant: 'bmaphidpi',
+						format: 'jpeg'
+					}
+				},
+				orthofoto: {
+					options: {
+						maxZoom: 20, // currently only in Vienna
+						variant: 'bmaporthofoto30cm',
+						format: 'jpeg'
+					}
+				}
+			}
+		},
+		nlmaps: {
+			url: '//geodata.nationaalgeoregister.nl/tiles/service/wmts/{variant}/EPSG:3857/{z}/{x}/{y}.png',
+			options: {
+				minZoom: 6,
+				maxZoom: 19,
+				bounds: [[50.5, 3.25], [54, 7.6]],
+				attribution: 'Kaartgegevens &copy; <a href="kadaster.nl">Kadaster</a>'
+			},
+			variants: {
+				'standaard': 'brtachtergrondkaart',
+				'pastel': 'brtachtergrondkaartpastel',
+				'grijs': 'brtachtergrondkaartgrijs',
+				'luchtfoto': {
+					'url': '//geodata.nationaalgeoregister.nl/luchtfoto/rgb/wmts/1.0.0/2016_ortho25/EPSG:3857/{z}/{x}/{y}.png',
+				}
+			}
+		},
+		NASAGIBS: {
+			url: 'https://map1.vis.earthdata.nasa.gov/wmts-webmerc/{variant}/default/{time}/{tilematrixset}{maxZoom}/{z}/{y}/{x}.{format}',
+			options: {
+				attribution:
+					'Imagery provided by services from the Global Imagery Browse Services (GIBS), operated by the NASA/GSFC/Earth Science Data and Information System ' +
+					'(<a href="https://earthdata.nasa.gov">ESDIS</a>) with funding provided by NASA/HQ.',
+				bounds: [[-85.0511287776, -179.999999975], [85.0511287776, 179.999999975]],
+				minZoom: 1,
+				maxZoom: 9,
+				format: 'jpg',
+				time: '',
+				tilematrixset: 'GoogleMapsCompatible_Level'
+			},
+			variants: {
+				ModisTerraTrueColorCR: 'MODIS_Terra_CorrectedReflectance_TrueColor',
+				ModisTerraBands367CR: 'MODIS_Terra_CorrectedReflectance_Bands367',
+				ViirsEarthAtNight2012: {
+					options: {
+						variant: 'VIIRS_CityLights_2012',
+						maxZoom: 8
+					}
+				},
+				ModisTerraLSTDay: {
+					options: {
+						variant: 'MODIS_Terra_Land_Surface_Temp_Day',
+						format: 'png',
+						maxZoom: 7,
+						opacity: 0.75
+					}
+				},
+				ModisTerraSnowCover: {
+					options: {
+						variant: 'MODIS_Terra_Snow_Cover',
+						format: 'png',
+						maxZoom: 8,
+						opacity: 0.75
+					}
+				},
+				ModisTerraAOD: {
+					options: {
+						variant: 'MODIS_Terra_Aerosol',
+						format: 'png',
+						maxZoom: 6,
+						opacity: 0.75
+					}
+				},
+				ModisTerraChlorophyll: {
+					options: {
+						variant: 'MODIS_Terra_Chlorophyll_A',
+						format: 'png',
+						maxZoom: 7,
+						opacity: 0.75
+					}
+				}
+			}
+		},
+		NLS: {
+			// NLS maps are copyright National library of Scotland.
+			// http://maps.nls.uk/projects/api/index.html
+			// Please contact NLS for anything other than non-commercial low volume usage
+			//
+			// Map sources: Ordnance Survey 1:1m to 1:63K, 1920s-1940s
+			//   z0-9  - 1:1m
+			//  z10-11 - quarter inch (1:253440)
+			//  z12-18 - one inch (1:63360)
+			url: '//nls-{s}.tileserver.com/nls/{z}/{x}/{y}.jpg',
+			options: {
+				attribution: '<a href="http://geo.nls.uk/maps/">National Library of Scotland Historic Maps</a>',
+				bounds: [[49.6, -12], [61.7, 3]],
+				minZoom: 1,
+				maxZoom: 18,
+				subdomains: '0123',
+			}
+		},
+		JusticeMap: {
+			// Justice Map (http://www.justicemap.org/)
+			// Visualize race and income data for your community, county and country.
+			// Includes tools for data journalists, bloggers and community activists.
+			url: 'http://www.justicemap.org/tile/{size}/{variant}/{z}/{x}/{y}.png',
+			options: {
+				attribution: '<a href="http://www.justicemap.org/terms.php">Justice Map</a>',
+				// one of 'county', 'tract', 'block'
+				size: 'county',
+				// Bounds for USA, including Alaska and Hawaii
+				bounds: [[14, -180], [72, -56]]
+			},
+			variants: {
+				income: 'income',
+				americanIndian: 'indian',
+				asian: 'asian',
+				black: 'black',
+				hispanic: 'hispanic',
+				multi: 'multi',
+				nonWhite: 'nonwhite',
+				white: 'white',
+				plurality: 'plural'
+			}
+		},
+		Wikimedia: {
+			url: 'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png',
+			options: {
+				attribution: '<a href="https://wikimediafoundation.org/wiki/Maps_Terms_of_Use">Wikimedia</a>',
+				minZoom: 1,
+				maxZoom: 18
+			}
+		}
+	};
+
+	L.tileLayer.provider = function (provider, options) {
+		return new L.TileLayer.Provider(provider, options);
+	};
+
+	return L;
+}));
+</script>
+<script>LeafletWidget.methods.addProviderTiles = function(provider, layerId, group, options) {
+  this.layerManager.addLayer(L.tileLayer.provider(provider, options), "tile", layerId, group);
+};
+</script>
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css">
@@ -5641,37 +6393,86 @@ $(document).ready(function () {
 <p>Try executing this chunk by clicking the <em>Run</em> button within the chunk or by placing your cursor inside it and pressing <em>Ctrl+Shift+Enter</em>.</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuXG5saWJyYXJ5KHRtYXApXG5saWJyYXJ5KGxlYWZsZXQpXG5cbmxlYWRiZmxvX2RhdGEgPSByZWFkLmNzdihcImRhdGEvYnVmZmFsb19sZWFkLmNzdlwiLCBoZWFkZXI9VFJVRSlcblxuXG5sZWFmbGV0KGxlYWRiZmxvX2RhdGEpICU+JSBhZGRUaWxlcygpICU+JSBhZGRDaXJjbGVzKGNvbG9yID0gfmxlYWRfcHBiLCBsbmcgPSB+bG9uZ2l0dWRlLCBsYXQgPSB+bGF0aXR1ZGUpXG5gYGAifQ== -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuXG5saWJyYXJ5KGxlYWZsZXQpXG5cbmxlYWRiZmxvX2RhdGEgPSByZWFkLmNzdihcImRhdGEvYnVmZmFsb19sZWFkLmNzdlwiLCBoZWFkZXI9VFJVRSlcblxuXG5sZWFmbGV0KGxlYWRiZmxvX2RhdGEpICU+JSBhZGRQcm92aWRlclRpbGVzKHByb3ZpZGVycyRDYXJ0b0RCLlBvc2l0cm9uKSAlPiUgYWRkQ2lyY2xlcyhjb2xvciA9IH5sZWFkX3BwYiwgbG5nID0gfmxvbmdpdHVkZSwgbGF0ID0gfmxhdGl0dWRlKVxuYGBgIn0= -->
 <pre class="r"><code>
-library(tmap)
 library(leaflet)
 
 leadbflo_data = read.csv(&quot;data/buffalo_lead.csv&quot;, header=TRUE)
 
 
-leaflet(leadbflo_data) %&gt;% addTiles() %&gt;% addCircles(color = ~lead_ppb, lng = ~longitude, lat = ~latitude)</code></pre>
+leaflet(leadbflo_data) %&gt;% addProviderTiles(providers$CartoDB.Positron) %&gt;% addCircles(color = ~lead_ppb, lng = ~longitude, lat = ~latitude)</code></pre>
 <!-- rnb-source-end -->
 <p>
-<!-- rnb-htmlwidget-begin eyJkZXBlbmRlbmNpZXMiOlt7ImFsbF9maWxlcyI6dHJ1ZSwiYXR0YWNobWVudCI6W10sImhlYWQiOltdLCJtZXRhIjpbXSwibmFtZSI6Imh0bWx3aWRnZXRzIiwicGFja2FnZSI6W10sInNjcmlwdCI6Imh0bWx3aWRnZXRzLmpzIiwic3JjIjp7ImZpbGUiOiJDOi9Vc2Vycy9ndXNoaS9PbmVEcml2ZS9Eb2N1bWVudHMvUi93aW4tbGlicmFyeS8zLjYvaHRtbHdpZGdldHMvd3d3In0sInN0eWxlc2hlZXQiOltdLCJ2ZXJzaW9uIjoiMS4zIn0seyJhbGxfZmlsZXMiOnRydWUsImF0dGFjaG1lbnQiOltdLCJoZWFkIjpbXSwibWV0YSI6W10sIm5hbWUiOiJqcXVlcnkiLCJwYWNrYWdlIjpbXSwic2NyaXB0IjoianF1ZXJ5Lm1pbi5qcyIsInNyYyI6eyJmaWxlIjoiQzovVXNlcnMvZ3VzaGkvT25lRHJpdmUvRG9jdW1lbnRzL1Ivd2luLWxpYnJhcnkvMy42L2xlYWZsZXQvaHRtbHdpZGdldHMvbGliL2pxdWVyeSJ9LCJzdHlsZXNoZWV0IjpbXSwidmVyc2lvbiI6IjEuMTIuNCJ9LHsiYWxsX2ZpbGVzIjp0cnVlLCJhdHRhY2htZW50IjpbXSwiaGVhZCI6W10sIm1ldGEiOltdLCJuYW1lIjoibGVhZmxldCIsInBhY2thZ2UiOltdLCJzY3JpcHQiOiJsZWFmbGV0LmpzIiwic3JjIjp7ImZpbGUiOiJDOi9Vc2Vycy9ndXNoaS9PbmVEcml2ZS9Eb2N1bWVudHMvUi93aW4tbGlicmFyeS8zLjYvbGVhZmxldC9odG1sd2lkZ2V0cy9saWIvbGVhZmxldCJ9LCJzdHlsZXNoZWV0IjoibGVhZmxldC5jc3MiLCJ2ZXJzaW9uIjoiMS4zLjEifSx7ImFsbF9maWxlcyI6dHJ1ZSwiYXR0YWNobWVudCI6W10sImhlYWQiOltdLCJtZXRhIjpbXSwibmFtZSI6ImxlYWZsZXRmaXgiLCJwYWNrYWdlIjpbXSwic2NyaXB0IjpbXSwic3JjIjp7ImZpbGUiOiJDOi9Vc2Vycy9ndXNoaS9PbmVEcml2ZS9Eb2N1bWVudHMvUi93aW4tbGlicmFyeS8zLjYvbGVhZmxldC9odG1sd2lkZ2V0cy9saWIvbGVhZmxldGZpeCJ9LCJzdHlsZXNoZWV0IjoibGVhZmxldGZpeC5jc3MiLCJ2ZXJzaW9uIjoiMS4wLjAifSx7ImFsbF9maWxlcyI6dHJ1ZSwiYXR0YWNobWVudCI6W10sImhlYWQiOltdLCJtZXRhIjpbXSwibmFtZSI6IlByb2o0TGVhZmxldCIsInBhY2thZ2UiOltdLCJzY3JpcHQiOlsicHJvajQtY29tcHJlc3NlZC5qcyIsInByb2o0bGVhZmxldC5qcyJdLCJzcmMiOnsiZmlsZSI6IkM6L1VzZXJzL2d1c2hpL09uZURyaXZlL0RvY3VtZW50cy9SL3dpbi1saWJyYXJ5LzMuNi9sZWFmbGV0L2h0bWx3aWRnZXRzL3BsdWdpbnMvUHJvajRMZWFmbGV0In0sInN0eWxlc2hlZXQiOltdLCJ2ZXJzaW9uIjoiMS4wLjEifSx7ImFsbF9maWxlcyI6dHJ1ZSwiYXR0YWNobWVudCI6W10sImhlYWQiOltdLCJtZXRhIjpbXSwibmFtZSI6InJzdHVkaW9fbGVhZmxldCIsInBhY2thZ2UiOltdLCJzY3JpcHQiOltdLCJzcmMiOnsiZmlsZSI6IkM6L1VzZXJzL2d1c2hpL09uZURyaXZlL0RvY3VtZW50cy9SL3dpbi1saWJyYXJ5LzMuNi9sZWFmbGV0L2h0bWx3aWRnZXRzL2xpYi9yc3R1ZGlvX2xlYWZsZXQifSwic3R5bGVzaGVldCI6InJzdHVkaW9fbGVhZmxldC5jc3MiLCJ2ZXJzaW9uIjoiMS4zLjEifSx7ImFsbF9maWxlcyI6ZmFsc2UsImF0dGFjaG1lbnQiOltdLCJoZWFkIjpbXSwibWV0YSI6W10sIm5hbWUiOiJsZWFmbGV0LWJpbmRpbmciLCJwYWNrYWdlIjpbXSwic2NyaXB0IjoibGVhZmxldC5qcyIsInNyYyI6eyJmaWxlIjoiQzovVXNlcnMvZ3VzaGkvT25lRHJpdmUvRG9jdW1lbnRzL1Ivd2luLWxpYnJhcnkvMy42L2xlYWZsZXQvaHRtbHdpZGdldHMifSwic3R5bGVzaGVldCI6W10sInZlcnNpb24iOiIyLjAuMiJ9XSwibWV0YWRhdGEiOnsiY2xhc3NlcyI6WyJsZWFmbGV0IiwiaHRtbHdpZGdldCJdLCJzaXppbmdQb2xpY3kiOnsiYnJvd3NlciI6eyJkZWZhdWx0SGVpZ2h0IjpbXSwiZGVmYXVsdFdpZHRoIjpbXSwiZXh0ZXJuYWwiOltmYWxzZV0sImZpbGwiOlt0cnVlXSwicGFkZGluZyI6W119LCJkZWZhdWx0SGVpZ2h0IjpbNDAwXSwiZGVmYXVsdFdpZHRoIjpbIjEwMCUiXSwia25pdHIiOnsiZGVmYXVsdEhlaWdodCI6W10sImRlZmF1bHRXaWR0aCI6W10sImZpZ3VyZSI6W3RydWVdfSwicGFkZGluZyI6WzBdLCJ2aWV3ZXIiOnsiZGVmYXVsdEhlaWdodCI6W10sImRlZmF1bHRXaWR0aCI6W10sImZpbGwiOlt0cnVlXSwicGFkZGluZyI6W10sInBhbmVIZWlnaHQiOltdLCJzdXBwcmVzcyI6W2ZhbHNlXX0sInZpZXdlci5maWxsIjpbdHJ1ZV0sInZpZXdlci5wYWRkaW5nIjpbMF19fX0= -->
+<!-- rnb-htmlwidget-begin eyJkZXBlbmRlbmNpZXMiOlt7ImFsbF9maWxlcyI6dHJ1ZSwiYXR0YWNobWVudCI6W10sImhlYWQiOltdLCJtZXRhIjpbXSwibmFtZSI6Imh0bWx3aWRnZXRzIiwicGFja2FnZSI6W10sInNjcmlwdCI6Imh0bWx3aWRnZXRzLmpzIiwic3JjIjp7ImZpbGUiOiJDOi9Vc2Vycy9ndXNoaS9PbmVEcml2ZS9Eb2N1bWVudHMvUi93aW4tbGlicmFyeS8zLjYvaHRtbHdpZGdldHMvd3d3In0sInN0eWxlc2hlZXQiOltdLCJ2ZXJzaW9uIjoiMS4zIn0seyJhbGxfZmlsZXMiOnRydWUsImF0dGFjaG1lbnQiOltdLCJoZWFkIjpbXSwibWV0YSI6W10sIm5hbWUiOiJqcXVlcnkiLCJwYWNrYWdlIjpbXSwic2NyaXB0IjoianF1ZXJ5Lm1pbi5qcyIsInNyYyI6eyJmaWxlIjoiQzovVXNlcnMvZ3VzaGkvT25lRHJpdmUvRG9jdW1lbnRzL1Ivd2luLWxpYnJhcnkvMy42L2xlYWZsZXQvaHRtbHdpZGdldHMvbGliL2pxdWVyeSJ9LCJzdHlsZXNoZWV0IjpbXSwidmVyc2lvbiI6IjEuMTIuNCJ9LHsiYWxsX2ZpbGVzIjp0cnVlLCJhdHRhY2htZW50IjpbXSwiaGVhZCI6W10sIm1ldGEiOltdLCJuYW1lIjoibGVhZmxldCIsInBhY2thZ2UiOltdLCJzY3JpcHQiOiJsZWFmbGV0LmpzIiwic3JjIjp7ImZpbGUiOiJDOi9Vc2Vycy9ndXNoaS9PbmVEcml2ZS9Eb2N1bWVudHMvUi93aW4tbGlicmFyeS8zLjYvbGVhZmxldC9odG1sd2lkZ2V0cy9saWIvbGVhZmxldCJ9LCJzdHlsZXNoZWV0IjoibGVhZmxldC5jc3MiLCJ2ZXJzaW9uIjoiMS4zLjEifSx7ImFsbF9maWxlcyI6dHJ1ZSwiYXR0YWNobWVudCI6W10sImhlYWQiOltdLCJtZXRhIjpbXSwibmFtZSI6ImxlYWZsZXRmaXgiLCJwYWNrYWdlIjpbXSwic2NyaXB0IjpbXSwic3JjIjp7ImZpbGUiOiJDOi9Vc2Vycy9ndXNoaS9PbmVEcml2ZS9Eb2N1bWVudHMvUi93aW4tbGlicmFyeS8zLjYvbGVhZmxldC9odG1sd2lkZ2V0cy9saWIvbGVhZmxldGZpeCJ9LCJzdHlsZXNoZWV0IjoibGVhZmxldGZpeC5jc3MiLCJ2ZXJzaW9uIjoiMS4wLjAifSx7ImFsbF9maWxlcyI6dHJ1ZSwiYXR0YWNobWVudCI6W10sImhlYWQiOltdLCJtZXRhIjpbXSwibmFtZSI6IlByb2o0TGVhZmxldCIsInBhY2thZ2UiOltdLCJzY3JpcHQiOlsicHJvajQtY29tcHJlc3NlZC5qcyIsInByb2o0bGVhZmxldC5qcyJdLCJzcmMiOnsiZmlsZSI6IkM6L1VzZXJzL2d1c2hpL09uZURyaXZlL0RvY3VtZW50cy9SL3dpbi1saWJyYXJ5LzMuNi9sZWFmbGV0L2h0bWx3aWRnZXRzL3BsdWdpbnMvUHJvajRMZWFmbGV0In0sInN0eWxlc2hlZXQiOltdLCJ2ZXJzaW9uIjoiMS4wLjEifSx7ImFsbF9maWxlcyI6dHJ1ZSwiYXR0YWNobWVudCI6W10sImhlYWQiOltdLCJtZXRhIjpbXSwibmFtZSI6InJzdHVkaW9fbGVhZmxldCIsInBhY2thZ2UiOltdLCJzY3JpcHQiOltdLCJzcmMiOnsiZmlsZSI6IkM6L1VzZXJzL2d1c2hpL09uZURyaXZlL0RvY3VtZW50cy9SL3dpbi1saWJyYXJ5LzMuNi9sZWFmbGV0L2h0bWx3aWRnZXRzL2xpYi9yc3R1ZGlvX2xlYWZsZXQifSwic3R5bGVzaGVldCI6InJzdHVkaW9fbGVhZmxldC5jc3MiLCJ2ZXJzaW9uIjoiMS4zLjEifSx7ImFsbF9maWxlcyI6ZmFsc2UsImF0dGFjaG1lbnQiOltdLCJoZWFkIjpbXSwibWV0YSI6W10sIm5hbWUiOiJsZWFmbGV0LWJpbmRpbmciLCJwYWNrYWdlIjpbXSwic2NyaXB0IjoibGVhZmxldC5qcyIsInNyYyI6eyJmaWxlIjoiQzovVXNlcnMvZ3VzaGkvT25lRHJpdmUvRG9jdW1lbnRzL1Ivd2luLWxpYnJhcnkvMy42L2xlYWZsZXQvaHRtbHdpZGdldHMifSwic3R5bGVzaGVldCI6W10sInZlcnNpb24iOiIyLjAuMiJ9LHsiYWxsX2ZpbGVzIjp0cnVlLCJhdHRhY2htZW50IjpbXSwiaGVhZCI6W10sIm1ldGEiOltdLCJuYW1lIjoibGVhZmxldC1wcm92aWRlcnMiLCJwYWNrYWdlIjpbXSwic2NyaXB0IjoibGVhZmxldC1wcm92aWRlcnMuanMiLCJzcmMiOnsiZmlsZSI6IkM6L1VzZXJzL2d1c2hpL09uZURyaXZlL0RvY3VtZW50cy9SL3dpbi1saWJyYXJ5LzMuNi9sZWFmbGV0L2h0bWx3aWRnZXRzL2xpYi9sZWFmbGV0LXByb3ZpZGVycyJ9LCJzdHlsZXNoZWV0IjpbXSwidmVyc2lvbiI6IjEuMS4xNyJ9LHsiYWxsX2ZpbGVzIjp0cnVlLCJhdHRhY2htZW50IjpbXSwiaGVhZCI6W10sIm1ldGEiOltdLCJuYW1lIjoibGVhZmxldC1wcm92aWRlcnMtcGx1Z2luIiwicGFja2FnZSI6W10sInNjcmlwdCI6ImxlYWZsZXQtcHJvdmlkZXJzLXBsdWdpbi5qcyIsInNyYyI6eyJmaWxlIjoiQzovVXNlcnMvZ3VzaGkvT25lRHJpdmUvRG9jdW1lbnRzL1Ivd2luLWxpYnJhcnkvMy42L2xlYWZsZXQvaHRtbHdpZGdldHMvcGx1Z2lucy9sZWFmbGV0LXByb3ZpZGVycy1wbHVnaW4ifSwic3R5bGVzaGVldCI6W10sInZlcnNpb24iOiIyLjAuMiJ9XSwibWV0YWRhdGEiOnsiY2xhc3NlcyI6WyJsZWFmbGV0IiwiaHRtbHdpZGdldCJdLCJzaXppbmdQb2xpY3kiOnsiYnJvd3NlciI6eyJkZWZhdWx0SGVpZ2h0IjpbXSwiZGVmYXVsdFdpZHRoIjpbXSwiZXh0ZXJuYWwiOltmYWxzZV0sImZpbGwiOlt0cnVlXSwicGFkZGluZyI6W119LCJkZWZhdWx0SGVpZ2h0IjpbNDAwXSwiZGVmYXVsdFdpZHRoIjpbIjEwMCUiXSwia25pdHIiOnsiZGVmYXVsdEhlaWdodCI6W10sImRlZmF1bHRXaWR0aCI6W10sImZpZ3VyZSI6W3RydWVdfSwicGFkZGluZyI6WzBdLCJ2aWV3ZXIiOnsiZGVmYXVsdEhlaWdodCI6W10sImRlZmF1bHRXaWR0aCI6W10sImZpbGwiOlt0cnVlXSwicGFkZGluZyI6W10sInBhbmVIZWlnaHQiOltdLCJzdXBwcmVzcyI6W2ZhbHNlXX0sInZpZXdlci5maWxsIjpbdHJ1ZV0sInZpZXdlci5wYWRkaW5nIjpbMF19fX0= -->
 
 <!-- htmlwidget-container-begin -->
-<div id="htmlwidget-f0b02667b3beabc74a91" style="width:500px;height:500px;" class="leaflet html-widget"></div>
+<div id="htmlwidget-f4dd08dd09f18cc5590b" style="width:500px;height:500px;" class="leaflet html-widget"></div>
 <!-- htmlwidget-container-end -->
-<script type="application/json" data-for="htmlwidget-f0b02667b3beabc74a91">{"x":{"options":{"crs":{"crsClass":"L.CRS.EPSG3857","code":null,"proj4def":null,"projectedBounds":null,"options":{}}},"calls":[{"method":"addTiles","args":["//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",null,null,{"minZoom":0,"maxZoom":18,"tileSize":256,"subdomains":"abc","errorTileUrl":"","tms":false,"noWrap":false,"zoomOffset":0,"zoomReverse":false,"opacity":1,"zIndex":1,"detectRetina":false,"attribution":"&copy; <a href=\"http://openstreetmap.org\">OpenStreetMap<\/a> contributors, <a href=\"http://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA<\/a>"}]},{"method":"addCircles","args":[[42.873243,42.9403918,42.9543404,42.915956,42.915944,42.925537,42.916416,42.859383,42.861782,42.921638,42.9183189,42.920052,42.917958,42.9196973,42.9390857,42.9454327,42.954358,42.843143,42.84395,42.842608,42.936774,42.9258363,42.86564,42.956081,42.93661,42.860703,42.902395,42.9363591,42.94321,42.9211219,42.953683,42.9512224,42.946786,42.835669,42.842304,42.9129757,42.905536,42.948259,42.956032,42.892821,42.9430391,42.8456325,42.8676804,42.962776,42.962923,42.9056993,42.952059,42.94094,42.9540743,42.940578,42.933475,42.938031,42.904045,42.92432,42.86564,42.881853,42.9543404,42.960678,42.915963,42.916416,42.915956,42.915944,42.869124,42.861782,42.860703,42.859383,42.902395,42.9196973,42.920052,42.920983,42.917958,42.933475,42.9390857,42.925508,42.94321,42.9512224,42.954358,42.9454327,42.957484,42.946786,42.84395,42.853611,42.8456325,42.840043,42.8523455,42.843143,42.905536,42.940578,42.956081,42.904045,42.9363591,42.9129757,42.892821,42.936774,42.848794,42.8676804,42.9587881,42.94094,42.91742,42.956032,42.952355,42.962923,42.952059,42.962776,42.938031,42.9540743,42.92432,42.9211219,42.887624,42.894877,42.86564,42.8923833,42.8888618,42.873243,42.916294,42.916859,42.855601,42.8556891,42.8635772,42.922417,42.9506919,42.945954,42.957484,42.84395,42.842819,42.956032,42.8559945,42.952059,42.8329135,42.855706,42.9232927,42.9451154,42.8424071,42.922434,42.906945,42.9543404,42.844778,42.925657,42.920294,42.950783,42.847969,42.859383,42.94094,42.935595,42.913799,42.8367233,42.8432343,42.956081,42.8593388,42.949837,42.890244,42.957654,42.946786,42.868167,42.917211,42.948703,42.862964,42.935593,42.905347,42.851328,42.92432,42.9540743,42.893826,42.907955,42.8414387,42.9167258,42.938031,42.86564,42.887565,42.964214,42.9543404,42.956081,42.9167258,42.916294,42.916859,42.917064,42.9172583,42.916644,42.916969,42.913286,42.906945,42.859383,42.8635772,42.862964,42.905384,42.9098029,42.906249,42.920294,42.9296941,42.92586,42.93211,42.935593,42.9336259,42.93286,42.938656,42.928153,42.945954,42.950364,42.957484,42.9506919,42.957948,42.941217,42.949837,42.851493,42.842819,42.8424071,42.833646,42.833539,42.847969,42.8533277,42.927529,42.930415,42.8706201,42.950783,42.9270799,42.8593388,42.941128,42.948379,42.9577818,42.905859,42.893826,42.8463009,42.919894,42.94094,42.9232927,42.8362745,42.905347,42.930319,42.9476439,42.937574,42.9360144,42.914341,42.8888618,42.92432,42.892632,42.8432343,42.938096,42.935595,42.884162,42.86564,42.894512,42.879212,42.881415,42.873243,42.964214,42.940655,42.8635772,42.860703,42.906249,42.940578,42.9394511,42.9577818,42.957484,42.945954,42.949837,42.949966,42.833646,42.8511996,42.8424071,42.852241,42.847941,42.842247,42.9270799,42.920294,42.957948,42.9012624,42.956032,42.8706201,42.948784,42.9471756,42.909617,42.862964,42.8593388,42.921643,42.9363591,42.9604351,42.954358,42.9390408,42.849354,42.893826,42.9490456,42.938096,42.9167258,42.94094,42.915961,42.93286,42.925708,42.924354,42.8362746,42.916859,42.9540743,42.9211219,42.842819,42.946011,42.939179,42.9506919,42.92432,42.887565,42.8432343,42.956729],[-78.810401,-78.8868439,-78.886695,-78.846844,-78.845146,-78.894177,-78.847488,-78.81646,-78.816073,-78.881922,-78.883456,-78.882799,-78.8829389,-78.882683,-78.8415845,-78.8658521,-78.861397,-78.829036,-78.815839,-78.821296,-78.843281,-78.8282466,-78.864803,-78.899325,-78.8989813,-78.812481,-78.850616,-78.8031662,-78.807528,-78.807486,-78.873549,-78.8429249,-78.852653,-78.810208,-78.821985,-78.8744867,-78.8823,-78.902284,-78.899235,-78.84616,-78.8535636,-78.8137842,-78.8070958,-78.898388,-78.894865,-78.8059172,-78.871114,-78.847466,-78.8712929,-78.846172,-78.831329,-78.89898,-78.850436,-78.896769,-78.864803,-78.851191,-78.886695,-78.902169,-78.847501,-78.847488,-78.846844,-78.845146,-78.833193,-78.816073,-78.812481,-78.81646,-78.850616,-78.882683,-78.882799,-78.883622,-78.8829389,-78.831329,-78.8415845,-78.82831,-78.807528,-78.8429249,-78.861397,-78.8658521,-78.844705,-78.852653,-78.815839,-78.815797,-78.8137842,-78.8012568,-78.821266,-78.829036,-78.8823,-78.846172,-78.899325,-78.850436,-78.8031662,-78.8744867,-78.84616,-78.843281,-78.802619,-78.8070958,-78.9070456,-78.847466,-78.879009,-78.899235,-78.8993689,-78.894865,-78.871114,-78.898388,-78.89898,-78.8712929,-78.896769,-78.807486,-78.814566,-78.878688,-78.864803,-78.8591587,-78.8077478,-78.810401,-78.8582554,-78.8583007,-78.8128463,-78.8130365,-78.8170385,-78.883841,-78.861418,-78.859802,-78.844705,-78.815839,-78.829072,-78.899235,-78.8122245,-78.871114,-78.8087365,-78.812571,-78.8282451,-78.8003355,-78.8292787,-78.879432,-78.8710565,-78.886695,-78.8113585,-78.816097,-78.897846,-78.901397,-78.814649,-78.81646,-78.847466,-78.807755,-78.898201,-78.8040681,-78.8305064,-78.899325,-78.8051771,-78.87327,-78.80534,-78.838617,-78.852653,-78.809029,-78.8873179,-78.811538,-78.813631,-78.807639,-78.8463359,-78.8031309,-78.896769,-78.8712929,-78.8076478,-78.896108,-78.8211152,-78.8582896,-78.89898,-78.864803,-78.805581,-78.896277,-78.886695,-78.899325,-78.8582896,-78.8582554,-78.8583007,-78.8587919,-78.8582421,-78.858797,-78.8582713,-78.844776,-78.8710565,-78.81646,-78.8170385,-78.813631,-78.801453,-78.842809,-78.88551,-78.897846,-78.8384788,-78.846435,-78.820337,-78.807639,-78.811501,-78.815579,-78.801021,-78.807729,-78.859802,-78.846834,-78.844705,-78.861418,-78.838607,-78.867123,-78.87327,-78.8216182,-78.829072,-78.8292787,-78.821355,-78.812135,-78.814649,-78.8179916,-78.875275,-78.876647,-78.800317,-78.901397,-78.868727,-78.8051771,-78.818187,-78.809127,-78.8385691,-78.881394,-78.8076478,-78.802214,-78.88763,-78.847466,-78.8282451,-78.8016232,-78.8463359,-78.837653,-78.886056,-78.810021,-78.8005525,-78.880035,-78.8077478,-78.896769,-78.860086,-78.8305064,-78.8470959,-78.807755,-78.8655069,-78.864803,-78.8044929,-78.832749,-78.8399415,-78.810401,-78.896277,-78.899492,-78.8170385,-78.812481,-78.88551,-78.846172,-78.8324327,-78.8385691,-78.844705,-78.859802,-78.87327,-78.854015,-78.821355,-78.8298611,-78.8292787,-78.825249,-78.821477,-78.817827,-78.868727,-78.897846,-78.838607,-78.8583176,-78.899235,-78.800317,-78.8826356,-78.8056214,-78.856668,-78.813631,-78.8051771,-78.889315,-78.8031662,-78.9008578,-78.861397,-78.8346136,-78.817966,-78.8076478,-78.9071707,-78.8470959,-78.8582896,-78.847466,-78.847367,-78.815579,-78.8708,-78.846145,-78.8014892,-78.8583007,-78.8712929,-78.807486,-78.829072,-78.8380803,-78.8047349,-78.861418,-78.896769,-78.805581,-78.8305064,-78.822457],10,null,null,{"interactive":true,"className":"","stroke":true,"color":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,4,4,5,5,5,7,7,8,8,9,10,14,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.1,1.2,1.3,1.3,1.3,1.4,1.4,1.5,1.6,1.7,1.7,1.8,1.9,2,2.1,3.6,3.9,4.4,4.6,8.4,13,21,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1.1,1.1,1.1,1.2,1.2,1.3,1.5,1.5,1.6,1.7,1.9,1.9,2,2,2,2.2,2.2,2.3,2.4,2.6,2.6,2.8,2.8,2.9,3.1,3.1,3.1,3.9,3.9,4.4,4.5,6,6,6.3,6.3,7,7.2,7.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,3,3,4,4,4,4,6,8,10,12,28,60,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1.1,1.1,1.1,1.2,1.2,1.4,1.5,1.5,1.6,1.7,1.7,1.7,1.8,1.9,1.9,2,2,2.1,2.1,2.1,2.2,2.5,2.8,2.8,3.2,3.3,3.5,3.6,3.9,4.1,5.5,6.2,8.2,10.2,11,18.7,33.5,19],"weight":5,"opacity":0.5,"fill":true,"fillColor":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,4,4,5,5,5,7,7,8,8,9,10,14,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.1,1.2,1.3,1.3,1.3,1.4,1.4,1.5,1.6,1.7,1.7,1.8,1.9,2,2.1,3.6,3.9,4.4,4.6,8.4,13,21,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1.1,1.1,1.1,1.2,1.2,1.3,1.5,1.5,1.6,1.7,1.9,1.9,2,2,2,2.2,2.2,2.3,2.4,2.6,2.6,2.8,2.8,2.9,3.1,3.1,3.1,3.9,3.9,4.4,4.5,6,6,6.3,6.3,7,7.2,7.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,3,3,4,4,4,4,6,8,10,12,28,60,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1.1,1.1,1.1,1.2,1.2,1.4,1.5,1.5,1.6,1.7,1.7,1.7,1.8,1.9,1.9,2,2,2.1,2.1,2.1,2.2,2.5,2.8,2.8,3.2,3.3,3.5,3.6,3.9,4.1,5.5,6.2,8.2,10.2,11,18.7,33.5,19],"fillOpacity":0.2},null,null,null,{"interactive":false,"permanent":false,"direction":"auto","opacity":1,"offset":[0,0],"textsize":"10px","textOnly":false,"className":"","sticky":true},null,null]}],"limits":{"lat":[42.8329135,42.964214],"lng":[-78.9071707,-78.800317]}},"evals":[],"jsHooks":[]}</script>
-<!-- htmlwidget-sizing-policy-base64 PHNjcmlwdCB0eXBlPSJhcHBsaWNhdGlvbi9odG1sd2lkZ2V0LXNpemluZyIgZGF0YS1mb3I9Imh0bWx3aWRnZXQtZjBiMDI2NjdiM2JlYWJjNzRhOTEiPnsidmlld2VyIjp7IndpZHRoIjoiMTAwJSIsImhlaWdodCI6NDAwLCJwYWRkaW5nIjowLCJmaWxsIjp0cnVlfSwiYnJvd3NlciI6eyJ3aWR0aCI6IjEwMCUiLCJoZWlnaHQiOjQwMCwicGFkZGluZyI6MCwiZmlsbCI6dHJ1ZX19PC9zY3JpcHQ+ -->
+<script type="application/json" data-for="htmlwidget-f4dd08dd09f18cc5590b">{"x":{"options":{"crs":{"crsClass":"L.CRS.EPSG3857","code":null,"proj4def":null,"projectedBounds":null,"options":{}}},"calls":[{"method":"addProviderTiles","args":["CartoDB.Positron",null,null,{"errorTileUrl":"","noWrap":false,"detectRetina":false}]},{"method":"addCircles","args":[[42.873243,42.9403918,42.9543404,42.915956,42.915944,42.925537,42.916416,42.859383,42.861782,42.921638,42.9183189,42.920052,42.917958,42.9196973,42.9390857,42.9454327,42.954358,42.843143,42.84395,42.842608,42.936774,42.9258363,42.86564,42.956081,42.93661,42.860703,42.902395,42.9363591,42.94321,42.9211219,42.953683,42.9512224,42.946786,42.835669,42.842304,42.9129757,42.905536,42.948259,42.956032,42.892821,42.9430391,42.8456325,42.8676804,42.962776,42.962923,42.9056993,42.952059,42.94094,42.9540743,42.940578,42.933475,42.938031,42.904045,42.92432,42.86564,42.881853,42.9543404,42.960678,42.915963,42.916416,42.915956,42.915944,42.869124,42.861782,42.860703,42.859383,42.902395,42.9196973,42.920052,42.920983,42.917958,42.933475,42.9390857,42.925508,42.94321,42.9512224,42.954358,42.9454327,42.957484,42.946786,42.84395,42.853611,42.8456325,42.840043,42.8523455,42.843143,42.905536,42.940578,42.956081,42.904045,42.9363591,42.9129757,42.892821,42.936774,42.848794,42.8676804,42.9587881,42.94094,42.91742,42.956032,42.952355,42.962923,42.952059,42.962776,42.938031,42.9540743,42.92432,42.9211219,42.887624,42.894877,42.86564,42.8923833,42.8888618,42.873243,42.916294,42.916859,42.855601,42.8556891,42.8635772,42.922417,42.9506919,42.945954,42.957484,42.84395,42.842819,42.956032,42.8559945,42.952059,42.8329135,42.855706,42.9232927,42.9451154,42.8424071,42.922434,42.906945,42.9543404,42.844778,42.925657,42.920294,42.950783,42.847969,42.859383,42.94094,42.935595,42.913799,42.8367233,42.8432343,42.956081,42.8593388,42.949837,42.890244,42.957654,42.946786,42.868167,42.917211,42.948703,42.862964,42.935593,42.905347,42.851328,42.92432,42.9540743,42.893826,42.907955,42.8414387,42.9167258,42.938031,42.86564,42.887565,42.964214,42.9543404,42.956081,42.9167258,42.916294,42.916859,42.917064,42.9172583,42.916644,42.916969,42.913286,42.906945,42.859383,42.8635772,42.862964,42.905384,42.9098029,42.906249,42.920294,42.9296941,42.92586,42.93211,42.935593,42.9336259,42.93286,42.938656,42.928153,42.945954,42.950364,42.957484,42.9506919,42.957948,42.941217,42.949837,42.851493,42.842819,42.8424071,42.833646,42.833539,42.847969,42.8533277,42.927529,42.930415,42.8706201,42.950783,42.9270799,42.8593388,42.941128,42.948379,42.9577818,42.905859,42.893826,42.8463009,42.919894,42.94094,42.9232927,42.8362745,42.905347,42.930319,42.9476439,42.937574,42.9360144,42.914341,42.8888618,42.92432,42.892632,42.8432343,42.938096,42.935595,42.884162,42.86564,42.894512,42.879212,42.881415,42.873243,42.964214,42.940655,42.8635772,42.860703,42.906249,42.940578,42.9394511,42.9577818,42.957484,42.945954,42.949837,42.949966,42.833646,42.8511996,42.8424071,42.852241,42.847941,42.842247,42.9270799,42.920294,42.957948,42.9012624,42.956032,42.8706201,42.948784,42.9471756,42.909617,42.862964,42.8593388,42.921643,42.9363591,42.9604351,42.954358,42.9390408,42.849354,42.893826,42.9490456,42.938096,42.9167258,42.94094,42.915961,42.93286,42.925708,42.924354,42.8362746,42.916859,42.9540743,42.9211219,42.842819,42.946011,42.939179,42.9506919,42.92432,42.887565,42.8432343,42.956729],[-78.810401,-78.8868439,-78.886695,-78.846844,-78.845146,-78.894177,-78.847488,-78.81646,-78.816073,-78.881922,-78.883456,-78.882799,-78.8829389,-78.882683,-78.8415845,-78.8658521,-78.861397,-78.829036,-78.815839,-78.821296,-78.843281,-78.8282466,-78.864803,-78.899325,-78.8989813,-78.812481,-78.850616,-78.8031662,-78.807528,-78.807486,-78.873549,-78.8429249,-78.852653,-78.810208,-78.821985,-78.8744867,-78.8823,-78.902284,-78.899235,-78.84616,-78.8535636,-78.8137842,-78.8070958,-78.898388,-78.894865,-78.8059172,-78.871114,-78.847466,-78.8712929,-78.846172,-78.831329,-78.89898,-78.850436,-78.896769,-78.864803,-78.851191,-78.886695,-78.902169,-78.847501,-78.847488,-78.846844,-78.845146,-78.833193,-78.816073,-78.812481,-78.81646,-78.850616,-78.882683,-78.882799,-78.883622,-78.8829389,-78.831329,-78.8415845,-78.82831,-78.807528,-78.8429249,-78.861397,-78.8658521,-78.844705,-78.852653,-78.815839,-78.815797,-78.8137842,-78.8012568,-78.821266,-78.829036,-78.8823,-78.846172,-78.899325,-78.850436,-78.8031662,-78.8744867,-78.84616,-78.843281,-78.802619,-78.8070958,-78.9070456,-78.847466,-78.879009,-78.899235,-78.8993689,-78.894865,-78.871114,-78.898388,-78.89898,-78.8712929,-78.896769,-78.807486,-78.814566,-78.878688,-78.864803,-78.8591587,-78.8077478,-78.810401,-78.8582554,-78.8583007,-78.8128463,-78.8130365,-78.8170385,-78.883841,-78.861418,-78.859802,-78.844705,-78.815839,-78.829072,-78.899235,-78.8122245,-78.871114,-78.8087365,-78.812571,-78.8282451,-78.8003355,-78.8292787,-78.879432,-78.8710565,-78.886695,-78.8113585,-78.816097,-78.897846,-78.901397,-78.814649,-78.81646,-78.847466,-78.807755,-78.898201,-78.8040681,-78.8305064,-78.899325,-78.8051771,-78.87327,-78.80534,-78.838617,-78.852653,-78.809029,-78.8873179,-78.811538,-78.813631,-78.807639,-78.8463359,-78.8031309,-78.896769,-78.8712929,-78.8076478,-78.896108,-78.8211152,-78.8582896,-78.89898,-78.864803,-78.805581,-78.896277,-78.886695,-78.899325,-78.8582896,-78.8582554,-78.8583007,-78.8587919,-78.8582421,-78.858797,-78.8582713,-78.844776,-78.8710565,-78.81646,-78.8170385,-78.813631,-78.801453,-78.842809,-78.88551,-78.897846,-78.8384788,-78.846435,-78.820337,-78.807639,-78.811501,-78.815579,-78.801021,-78.807729,-78.859802,-78.846834,-78.844705,-78.861418,-78.838607,-78.867123,-78.87327,-78.8216182,-78.829072,-78.8292787,-78.821355,-78.812135,-78.814649,-78.8179916,-78.875275,-78.876647,-78.800317,-78.901397,-78.868727,-78.8051771,-78.818187,-78.809127,-78.8385691,-78.881394,-78.8076478,-78.802214,-78.88763,-78.847466,-78.8282451,-78.8016232,-78.8463359,-78.837653,-78.886056,-78.810021,-78.8005525,-78.880035,-78.8077478,-78.896769,-78.860086,-78.8305064,-78.8470959,-78.807755,-78.8655069,-78.864803,-78.8044929,-78.832749,-78.8399415,-78.810401,-78.896277,-78.899492,-78.8170385,-78.812481,-78.88551,-78.846172,-78.8324327,-78.8385691,-78.844705,-78.859802,-78.87327,-78.854015,-78.821355,-78.8298611,-78.8292787,-78.825249,-78.821477,-78.817827,-78.868727,-78.897846,-78.838607,-78.8583176,-78.899235,-78.800317,-78.8826356,-78.8056214,-78.856668,-78.813631,-78.8051771,-78.889315,-78.8031662,-78.9008578,-78.861397,-78.8346136,-78.817966,-78.8076478,-78.9071707,-78.8470959,-78.8582896,-78.847466,-78.847367,-78.815579,-78.8708,-78.846145,-78.8014892,-78.8583007,-78.8712929,-78.807486,-78.829072,-78.8380803,-78.8047349,-78.861418,-78.896769,-78.805581,-78.8305064,-78.822457],10,null,null,{"interactive":true,"className":"","stroke":true,"color":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,4,4,5,5,5,7,7,8,8,9,10,14,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.1,1.2,1.3,1.3,1.3,1.4,1.4,1.5,1.6,1.7,1.7,1.8,1.9,2,2.1,3.6,3.9,4.4,4.6,8.4,13,21,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1.1,1.1,1.1,1.2,1.2,1.3,1.5,1.5,1.6,1.7,1.9,1.9,2,2,2,2.2,2.2,2.3,2.4,2.6,2.6,2.8,2.8,2.9,3.1,3.1,3.1,3.9,3.9,4.4,4.5,6,6,6.3,6.3,7,7.2,7.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,3,3,4,4,4,4,6,8,10,12,28,60,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1.1,1.1,1.1,1.2,1.2,1.4,1.5,1.5,1.6,1.7,1.7,1.7,1.8,1.9,1.9,2,2,2.1,2.1,2.1,2.2,2.5,2.8,2.8,3.2,3.3,3.5,3.6,3.9,4.1,5.5,6.2,8.2,10.2,11,18.7,33.5,19],"weight":5,"opacity":0.5,"fill":true,"fillColor":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,4,4,5,5,5,7,7,8,8,9,10,14,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.1,1.2,1.3,1.3,1.3,1.4,1.4,1.5,1.6,1.7,1.7,1.8,1.9,2,2.1,3.6,3.9,4.4,4.6,8.4,13,21,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1.1,1.1,1.1,1.2,1.2,1.3,1.5,1.5,1.6,1.7,1.9,1.9,2,2,2,2.2,2.2,2.3,2.4,2.6,2.6,2.8,2.8,2.9,3.1,3.1,3.1,3.9,3.9,4.4,4.5,6,6,6.3,6.3,7,7.2,7.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,3,3,4,4,4,4,6,8,10,12,28,60,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1.1,1.1,1.1,1.2,1.2,1.4,1.5,1.5,1.6,1.7,1.7,1.7,1.8,1.9,1.9,2,2,2.1,2.1,2.1,2.2,2.5,2.8,2.8,3.2,3.3,3.5,3.6,3.9,4.1,5.5,6.2,8.2,10.2,11,18.7,33.5,19],"fillOpacity":0.2},null,null,null,{"interactive":false,"permanent":false,"direction":"auto","opacity":1,"offset":[0,0],"textsize":"10px","textOnly":false,"className":"","sticky":true},null,null]}],"limits":{"lat":[42.8329135,42.964214],"lng":[-78.9071707,-78.800317]}},"evals":[],"jsHooks":[]}</script>
+<!-- htmlwidget-sizing-policy-base64 PHNjcmlwdCB0eXBlPSJhcHBsaWNhdGlvbi9odG1sd2lkZ2V0LXNpemluZyIgZGF0YS1mb3I9Imh0bWx3aWRnZXQtZjRkZDA4ZGQwOWYxOGNjNTU5MGIiPnsidmlld2VyIjp7IndpZHRoIjoiMTAwJSIsImhlaWdodCI6NDAwLCJwYWRkaW5nIjowLCJmaWxsIjp0cnVlfSwiYnJvd3NlciI6eyJ3aWR0aCI6IjEwMCUiLCJoZWlnaHQiOjQwMCwicGFkZGluZyI6MCwiZmlsbCI6dHJ1ZX19PC9zY3JpcHQ+ -->
 
 <!-- rnb-htmlwidget-end -->
  <!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuTkFcbmBgYCJ9 --></p>
 <pre class="r"><code>NA</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubGlicmFyeShyZ2RhbClcbmxpYnJhcnkoc3ApXG54eSA8LSBsZWFkYmZsb19kYXRhWzc6OF1cbmRhdGEgPC0gbGVhZGJmbG9fZGF0YVstNzotOF1cbmJmbG9wYl9zcGF0aWFsIDwtIFNwYXRpYWxQb2ludHNEYXRhRnJhbWUoY29vcmRzPXh5LCBkYXRhPWRhdGEpXG5wcm9qNHN0cmluZyhiZmxvcGJfc3BhdGlhbCkgPC0gQ1JTKFwiK2luaXQ9ZXBzZzozODU3XCIpXG5idWJibGUoYmZsb3BiX3NwYXRpYWwsIFwibGVhZF9wcGJcIilcbmBgYCJ9 -->
+<pre class="r"><code>library(rgdal)
+library(sp)
+xy &lt;- leadbflo_data[7:8]
+data &lt;- leadbflo_data[-7:-8]
+bflopb_spatial &lt;- SpatialPointsDataFrame(coords=xy, data=data)
+proj4string(bflopb_spatial) &lt;- CRS(&quot;+init=epsg:3857&quot;)
+bubble(bflopb_spatial, &quot;lead_ppb&quot;)</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-plot-begin eyJjb25kaXRpb25zIjpbXSwiaGVpZ2h0IjozMTIuNzMxOCwic2l6ZV9iZWhhdmlvciI6MCwid2lkdGgiOjUwNn0= -->
+<p><img src="data:image/png;base64,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" /></p>
+<!-- rnb-plot-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYm94cGxvdChsZWFkX3BwYiB+IHppcGNvZGUsIGxlYWRiZmxvX2RhdGEpXG5gYGAifQ== -->
+<pre class="r"><code>boxplot(lead_ppb ~ zipcode, leadbflo_data)</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-plot-begin eyJjb25kaXRpb25zIjpbXSwiaGVpZ2h0IjozMTIuNzMxOCwic2l6ZV9iZWhhdmlvciI6MCwid2lkdGgiOjUwNn0= -->
+<p><img src="data:image/png;base64,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" /></p>
+<!-- rnb-plot-end -->
+<!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
-<p>Add a new chunk by clicking the <em>Insert Chunk</em> button on the toolbar or by pressing <em>Ctrl+Alt+I</em>.</p>
-<p>When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the <em>Preview</em> button or press <em>Ctrl+Shift+K</em> to preview the HTML file).</p>
-<p>The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike <em>Knit</em>, <em>Preview</em> does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.</p>
+<p>First attempts at geostatistical analysis:</p>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubGlicmFyeShnc3RhdClcblxudiA9IHZhcmlvZ3JhbShsZWFkX3BwYiB+IDEsIGJmbG9wYl9zcGF0aWFsKVxuXG5maXQudmFyaW9ncmFtKHYsIHZnbShjKFwiRXhwXCIsIFwiTWF0XCIsIFwiU3BoXCIpKSlcbmBgYCJ9 -->
+<pre class="r"><code>library(gstat)
+
+v = variogram(lead_ppb ~ 1, bflopb_spatial)
+
+fit.variogram(v, vgm(c(&quot;Exp&quot;, &quot;Mat&quot;, &quot;Sph&quot;)))</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiTm8gY29udmVyZ2VuY2UgYWZ0ZXIgMjAwIGl0ZXJhdGlvbnM6IHRyeSBkaWZmZXJlbnQgaW5pdGlhbCB2YWx1ZXM/Tm8gY29udmVyZ2VuY2UgYWZ0ZXIgMjAwIGl0ZXJhdGlvbnM6IHRyeSBkaWZmZXJlbnQgaW5pdGlhbCB2YWx1ZXM/c2luZ3VsYXIgbW9kZWwgaW4gdmFyaW9ncmFtIGZpdHNpbmd1bGFyIG1vZGVsIGluIHZhcmlvZ3JhbSBmaXRcbiJ9 -->
+<pre><code>No convergence after 200 iterations: try different initial values?No convergence after 200 iterations: try different initial values?singular model in variogram fitsingular model in variogram fit</code></pre>
+<!-- rnb-output-end -->
+<!-- rnb-frame-begin eyJtZXRhZGF0YSI6eyJjbGFzc2VzIjpbImRhdGEuZnJhbWUiXSwibmNvbCI6MywibnJvdyI6Mn0sInJkZiI6Ikg0c0lBQUFBQUFBQUJsMVNTMDdETUJCMW1xYW9rU2hJc09NSXFKRW9zQU9CYUJFZ0FhcGdRYmNtY1ZzTDE0NGNwKzBwV0NCeEJZN0NOZGh3RFFxVHp6ZzBrUncvajUrZjM0em5ZVEE2OUVjK0ljUWxiZ3YrSGtEUzZnOFBlc2M5UXBvTldEbWtTZHJadklUOW5aeEszRTJZaTgxOHZVWnNDVFpuSWdHMERXTzNqTHIzNlFUaDVUSkcrQmhQRVY3UnRDS0VDTytvc1Z6REVQYTVSbmpMSmNJTGxpQWNNbGxCeTMyaWM0VFhTbGdGWlowTjFhSnlWaEZZWlYxYnNSdHBhcGw3b2FBSkptN0xNYWFoVVJyUUNrWW5LOXo1NlhmeThmWEpTZlYxeW9MbTM5bmIrOG5yM3Y1UFhWN1NHVU41RjRNekZURjA2c1VKRjNhaHFaeXdta1picTBXQU92OWZzVkVRM2QrYWZUK2loZ1pqRFVlS0ZOYmtObFJzdUpJZzFzaGF3NnNkZG5RdHNKWEs3UEtvRzA1VCtkSTl5aTRvRFRpbG9kS014V1Y3TmRHWWgzVmxjc0lsZG9RbjZMTXRRd2VTekhNTVlzMGw5bzhQMFNRd3lsRGsrYUVTR0NtZVovVUh3aER3ekJJREFBQT0ifQ== -->
+<div data-pagedtable="false">
+<script data-pagedtable-source type="application/json">
+{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["model"],"name":[1],"type":["fctr"],"align":["left"]},{"label":["psill"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["range"],"name":[3],"type":["dbl"],"align":["right"]}],"data":[{"1":"Nug","2":"29.89239","3":"0.00000000","_rn_":"1"},{"1":"Sph","2":"0.00000","3":"0.01814742","_rn_":"2"}],"options":{"columns":{"min":{},"max":[10],"total":[3]},"rows":{"min":[10],"max":[10],"total":[2]},"pages":{}}}
+  </script>
+</div>
+<!-- rnb-frame-end -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuVGhlVmFyaW9ncmFtTW9kZWwgPC0gdmdtKHBzaWxsPTI5Ljg5MjM5LCBtb2RlbD1cIlNwaFwiLCBudWdnZXQ9MC4wMDAxLCByYW5nZT0wLjAxODE0NzQyKVxucGxvdCh2LCBtb2RlbD1UaGVWYXJpb2dyYW1Nb2RlbClcbmBgYCJ9 -->
+<pre class="r"><code>TheVariogramModel &lt;- vgm(psill=29.89239, model=&quot;Sph&quot;, nugget=0.0001, range=0.01814742)
+plot(v, model=TheVariogramModel)</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-plot-begin eyJjb25kaXRpb25zIjpbXSwiaGVpZ2h0IjozMTIuNzMxOCwic2l6ZV9iZWhhdmlvciI6MCwid2lkdGgiOjUwNn0= -->
+<p><img src="data:image/png;base64,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" /></p>
+<!-- rnb-plot-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<p>Sources:</p>
+<p><a href="http://gsp.humboldt.edu/OLM/R/04_01_Variograms.html" class="uri">http://gsp.humboldt.edu/OLM/R/04_01_Variograms.html</a> <a href="https://www.r-spatial.org/r/2016/02/14/gstat-variogram-fitting.html" class="uri">https://www.r-spatial.org/r/2016/02/14/gstat-variogram-fitting.html</a></p>
 <!-- rnb-text-end -->
 
-<div id="rmd-source-code">LS0tDQp0aXRsZTogIlIgTm90ZWJvb2siDQpvdXRwdXQ6IGh0bWxfbm90ZWJvb2sNCi0tLQ0KDQpUaGlzIGlzIGFuIFtSIE1hcmtkb3duXShodHRwOi8vcm1hcmtkb3duLnJzdHVkaW8uY29tKSBOb3RlYm9vay4gV2hlbiB5b3UgZXhlY3V0ZSBjb2RlIHdpdGhpbiB0aGUgbm90ZWJvb2ssIHRoZSByZXN1bHRzIGFwcGVhciBiZW5lYXRoIHRoZSBjb2RlLiANCg0KVHJ5IGV4ZWN1dGluZyB0aGlzIGNodW5rIGJ5IGNsaWNraW5nIHRoZSAqUnVuKiBidXR0b24gd2l0aGluIHRoZSBjaHVuayBvciBieSBwbGFjaW5nIHlvdXIgY3Vyc29yIGluc2lkZSBpdCBhbmQgcHJlc3NpbmcgKkN0cmwrU2hpZnQrRW50ZXIqLiANCg0KYGBge3J9DQoNCmxpYnJhcnkodG1hcCkNCmxpYnJhcnkobGVhZmxldCkNCg0KbGVhZGJmbG9fZGF0YSA9IHJlYWQuY3N2KCJkYXRhL2J1ZmZhbG9fbGVhZC5jc3YiLCBoZWFkZXI9VFJVRSkNCg0KDQpsZWFmbGV0KGxlYWRiZmxvX2RhdGEpICU+JSBhZGRUaWxlcygpICU+JSBhZGRDaXJjbGVzKGNvbG9yID0gfmxlYWRfcHBiLCBsbmcgPSB+bG9uZ2l0dWRlLCBsYXQgPSB+bGF0aXR1ZGUpDQoNCmBgYA0KDQpBZGQgYSBuZXcgY2h1bmsgYnkgY2xpY2tpbmcgdGhlICpJbnNlcnQgQ2h1bmsqIGJ1dHRvbiBvbiB0aGUgdG9vbGJhciBvciBieSBwcmVzc2luZyAqQ3RybCtBbHQrSSouDQoNCldoZW4geW91IHNhdmUgdGhlIG5vdGVib29rLCBhbiBIVE1MIGZpbGUgY29udGFpbmluZyB0aGUgY29kZSBhbmQgb3V0cHV0IHdpbGwgYmUgc2F2ZWQgYWxvbmdzaWRlIGl0IChjbGljayB0aGUgKlByZXZpZXcqIGJ1dHRvbiBvciBwcmVzcyAqQ3RybCtTaGlmdCtLKiB0byBwcmV2aWV3IHRoZSBIVE1MIGZpbGUpLg0KDQpUaGUgcHJldmlldyBzaG93cyB5b3UgYSByZW5kZXJlZCBIVE1MIGNvcHkgb2YgdGhlIGNvbnRlbnRzIG9mIHRoZSBlZGl0b3IuIENvbnNlcXVlbnRseSwgdW5saWtlICpLbml0KiwgKlByZXZpZXcqIGRvZXMgbm90IHJ1biBhbnkgUiBjb2RlIGNodW5rcy4gSW5zdGVhZCwgdGhlIG91dHB1dCBvZiB0aGUgY2h1bmsgd2hlbiBpdCB3YXMgbGFzdCBydW4gaW4gdGhlIGVkaXRvciBpcyBkaXNwbGF5ZWQuDQo=</div>
+<div id="rmd-source-code">LS0tDQp0aXRsZTogIlIgTm90ZWJvb2siDQpvdXRwdXQ6IGh0bWxfbm90ZWJvb2sNCi0tLQ0KDQpUaGlzIGlzIGFuIFtSIE1hcmtkb3duXShodHRwOi8vcm1hcmtkb3duLnJzdHVkaW8uY29tKSBOb3RlYm9vay4gV2hlbiB5b3UgZXhlY3V0ZSBjb2RlIHdpdGhpbiB0aGUgbm90ZWJvb2ssIHRoZSByZXN1bHRzIGFwcGVhciBiZW5lYXRoIHRoZSBjb2RlLiANCg0KVHJ5IGV4ZWN1dGluZyB0aGlzIGNodW5rIGJ5IGNsaWNraW5nIHRoZSAqUnVuKiBidXR0b24gd2l0aGluIHRoZSBjaHVuayBvciBieSBwbGFjaW5nIHlvdXIgY3Vyc29yIGluc2lkZSBpdCBhbmQgcHJlc3NpbmcgKkN0cmwrU2hpZnQrRW50ZXIqLiANCg0KYGBge3J9DQoNCmxpYnJhcnkobGVhZmxldCkNCg0KbGVhZGJmbG9fZGF0YSA9IHJlYWQuY3N2KCJkYXRhL2J1ZmZhbG9fbGVhZC5jc3YiLCBoZWFkZXI9VFJVRSkNCg0KDQpsZWFmbGV0KGxlYWRiZmxvX2RhdGEpICU+JSBhZGRQcm92aWRlclRpbGVzKHByb3ZpZGVycyRDYXJ0b0RCLlBvc2l0cm9uKSAlPiUgYWRkQ2lyY2xlcyhjb2xvciA9IH5sZWFkX3BwYiwgbG5nID0gfmxvbmdpdHVkZSwgbGF0ID0gfmxhdGl0dWRlKQ0KDQpgYGANCmBgYHtyfQ0KbGlicmFyeShyZ2RhbCkNCmxpYnJhcnkoc3ApDQp4eSA8LSBsZWFkYmZsb19kYXRhWzc6OF0NCmRhdGEgPC0gbGVhZGJmbG9fZGF0YVstNzotOF0NCmJmbG9wYl9zcGF0aWFsIDwtIFNwYXRpYWxQb2ludHNEYXRhRnJhbWUoY29vcmRzPXh5LCBkYXRhPWRhdGEpDQpwcm9qNHN0cmluZyhiZmxvcGJfc3BhdGlhbCkgPC0gQ1JTKCIraW5pdD1lcHNnOjM4NTciKQ0KYnViYmxlKGJmbG9wYl9zcGF0aWFsLCAibGVhZF9wcGIiKQ0KYGBgDQpgYGB7cn0NCmJveHBsb3QobGVhZF9wcGIgfiB6aXBjb2RlLCBsZWFkYmZsb19kYXRhKQ0KYGBgDQoNCkZpcnN0IGF0dGVtcHRzIGF0IGdlb3N0YXRpc3RpY2FsIGFuYWx5c2lzOg0KDQpgYGB7cn0NCmxpYnJhcnkoZ3N0YXQpDQoNCnYgPSB2YXJpb2dyYW0obGVhZF9wcGIgfiAxLCBiZmxvcGJfc3BhdGlhbCkNCg0KZml0LnZhcmlvZ3JhbSh2LCB2Z20oYygiRXhwIiwgIk1hdCIsICJTcGgiKSkpDQoNClRoZVZhcmlvZ3JhbU1vZGVsIDwtIHZnbShwc2lsbD0yOS44OTIzOSwgbW9kZWw9IlNwaCIsIG51Z2dldD0wLjAwMDEsIHJhbmdlPTAuMDE4MTQ3NDIpDQpwbG90KHYsIG1vZGVsPVRoZVZhcmlvZ3JhbU1vZGVsKQ0KYGBgDQoNCg0KU291cmNlczoNCg0KaHR0cDovL2dzcC5odW1ib2xkdC5lZHUvT0xNL1IvMDRfMDFfVmFyaW9ncmFtcy5odG1sDQpodHRwczovL3d3dy5yLXNwYXRpYWwub3JnL3IvMjAxNi8wMi8xNC9nc3RhdC12YXJpb2dyYW0tZml0dGluZy5odG1sDQo=</div>
 
 
 

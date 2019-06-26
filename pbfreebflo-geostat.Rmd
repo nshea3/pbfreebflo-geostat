@@ -9,18 +9,42 @@ Try executing this chunk by clicking the *Run* button within the chunk or by pla
 
 ```{r}
 
-library(tmap)
 library(leaflet)
 
 leadbflo_data = read.csv("data/buffalo_lead.csv", header=TRUE)
 
 
-leaflet(leadbflo_data) %>% addTiles() %>% addCircles(color = ~lead_ppb, lng = ~longitude, lat = ~latitude)
+leaflet(leadbflo_data) %>% addProviderTiles(providers$CartoDB.Positron) %>% addCircles(color = ~lead_ppb, lng = ~longitude, lat = ~latitude)
 
 ```
+```{r}
+library(rgdal)
+library(sp)
+xy <- leadbflo_data[7:8]
+data <- leadbflo_data[-7:-8]
+bflopb_spatial <- SpatialPointsDataFrame(coords=xy, data=data)
+proj4string(bflopb_spatial) <- CRS("+init=epsg:3857")
+bubble(bflopb_spatial, "lead_ppb")
+```
+```{r}
+boxplot(lead_ppb ~ zipcode, leadbflo_data)
+```
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+First attempts at geostatistical analysis:
 
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+```{r}
+library(gstat)
 
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+v = variogram(lead_ppb ~ 1, bflopb_spatial)
+
+fit.variogram(v, vgm(c("Exp", "Mat", "Sph")))
+
+TheVariogramModel <- vgm(psill=29.89239, model="Sph", nugget=0.0001, range=0.01814742)
+plot(v, model=TheVariogramModel)
+```
+
+
+Sources:
+
+http://gsp.humboldt.edu/OLM/R/04_01_Variograms.html
+https://www.r-spatial.org/r/2016/02/14/gstat-variogram-fitting.html
