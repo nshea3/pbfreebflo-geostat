@@ -41,6 +41,18 @@ fit.variogram(v, vgm(c("Exp", "Mat", "Sph")))
 
 TheVariogramModel <- vgm(psill=29.89239, model="Sph", nugget=0.0001, range=0.01814742)
 plot(v, model=TheVariogramModel)
+
+v
+```
+```{r}
+lead_dists <- as.matrix(dist(cbind(leadbflo_data$longitude, leadbflo_data$latitude)))
+
+lead_dists.inv <- 1/lead_dists
+diag(lead_dists.inv) <- 0
+ 
+lead_dists.inv[1:5, 1:5]
+
+Moran.I(leadbflo_data$lead_ppb, lead_dists.inv)
 ```
 
 
@@ -48,3 +60,4 @@ Sources:
 
 http://gsp.humboldt.edu/OLM/R/04_01_Variograms.html
 https://www.r-spatial.org/r/2016/02/14/gstat-variogram-fitting.html
+https://stats.idre.ucla.edu/r/faq/how-can-i-calculate-morans-i-in-r/
