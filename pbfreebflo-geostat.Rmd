@@ -45,6 +45,8 @@ plot(v, model=TheVariogramModel)
 v
 ```
 ```{r}
+library(ape)
+
 lead_dists <- as.matrix(dist(cbind(leadbflo_data$longitude, leadbflo_data$latitude)))
 
 lead_dists.inv <- 1/lead_dists
@@ -52,8 +54,12 @@ diag(lead_dists.inv) <- 0
  
 lead_dists.inv[1:5, 1:5]
 
+lead_dists.inv[is.infinite(lead_dists.inv)] <- 0
+
 Moran.I(leadbflo_data$lead_ppb, lead_dists.inv)
 ```
+
+Look at Geary's C
 
 
 Sources:
@@ -61,3 +67,52 @@ Sources:
 http://gsp.humboldt.edu/OLM/R/04_01_Variograms.html
 https://www.r-spatial.org/r/2016/02/14/gstat-variogram-fitting.html
 https://stats.idre.ucla.edu/r/faq/how-can-i-calculate-morans-i-in-r/
+```{r}
+hist(bflopb_spatial$lead_ppb, breaks = 100)
+```
+```{r}
+bflopbs_nonzero <- bflopb_spatial[bflopb_spatial$lead_ppb > 0,]
+bflopbs_nonzero$logpb <- log(bflopbs_nonzero$lead_ppb)
+hist(bflopbs_nonzero$logpb, breaks = 12)
+```
+```{r}
+#plot(bflopb_spatial$logpb)
+v = variogram(bflopbs_nonzero$logpb ~ 1, bflopbs_nonzero)
+
+fit.variogram(v, vgm(c("Exp", "Mat", "Sph")))
+
+TheVariogramModel <- vgm(psill=0.2132770, model="Sph", nugget=0.5717577, range=0.167889)
+plot(v, model=TheVariogramModel)
+```
+Now I'll try 
+
+```{r}
+
+bflopb_spatial$lead_ppb_logshift <- log(bflopb_spatial$lead_ppb + 1.0)
+
+v = variogram(bflopb_spatial$lead_ppb_logshift ~ 1, bflopb_spatial)
+
+fit.variogram(v, vgm(c("Exp", "Mat", "Sph")))
+
+hist(bflopb_spatial$lead_ppb_logshift)
+
+TheVariogramModel <- vgm(psill=0.1763589, model="Sph", nugget=0.5631378, range=0.06261703)
+plot(v, model=TheVariogramModel)
+
+
+```
+Creating a grid for interpolation
+
+```{r}
+#chull(xy)
+X <- matrix(rnorm(2000), ncol = 2)
+plot(xy, cex = 0.5)
+hpts <- chull(xy)
+hpts <- c(hpts, hpts[1])
+lines(xy[hpts, ])
+
+```
+
+
+
+Remembering the articles I read about this problem, probably better to use indicator kriging.
